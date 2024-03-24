@@ -1,0 +1,138 @@
+version: '3.8' 
+
+services:
+  app:
+    image: 'lepresidente/nginxproxymanager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    networks:
+      crowdsec:
+      npm:
+    ports:
+      # These ports are in format :
+      - '80:80' # Public HTTP Port
+      - '443:443' # Public HTTPS Port
+      - '81:81' # Admin Web Port
+    environment:
+      DB_MYSQL_HOST: "db"
+      DB_MYSQL_PORT: 3306
+      DB_MYSQL_USER: "npm"
+      DB_MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+      DB_MYSQL_NAME: "npm"
+      CROWDSEC_OPENRESTY_BOUNCER: |
+        ENABLED=true
+        API_URL=http://crowdsec:8080
+        API_KEY=${CROWDSEC_BOUNCER_APIKEY}
+      # Uncomment this if IPv6 is not enabled on your host
+      # DISABLE_IPV6: 'true'
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges=true
+
+  db:
+    image: 'mariadb:lts'
+    restart: unless-stopped
+    networks:
+      npm:
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ROOT_DATABASE_PASSWORD}
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: 'npm'
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    security_opt:
+      - no-new-privileges=true
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/healthcheck.sh', '--innodb_initialized']
+      start_period: 5s
+      timeout: 5s
+      interval: 5s
+      retries: 5
+
+  crowdsec:
+    image: docker.io/crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    environment:
+      - COLLECTIONS=crowdsecurity/nginx-proxy-manager
+    volumes:
+      - crowdsec-db:/var/lib/crowdsec/data/
+      - crowdsec-config:/etc/crowdsec/
+      - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
+      - ./data/logs/:/var/log/npm:ro
+    networks:
+      crowdsec:
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges=true
+
+volumes:
+  crowdsec-db:
+  crowdsec-config:
+
+networks:
+  crowdsec:
+    driver: bridge
+  npm:
+    driver: bridge
+    
+
+  uptime-kuma:
+    image: 'louislam/uptime-kuma:latest'
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - 3001:3001
+
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PUID=1000
+      - PGID=1000
+
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    ports:
+      - 3000:3000
+    volumes:
+      - /path/to/config:/app/config # Make sure your local config directory exists
+      - /var/run/docker.sock:/var/run/docker.sock # (optional) For docker integrations
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Winnipeg
+      - JELLYFIN_PublishedServerUrl=192.168.0.5 #optional
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - 8096:8096
+      - 8920:8920 #optional
+      - 7359:7359/udp #optional
+      - 1900:1900/udp #optional
+    restart: unless-stopped
+
+  pialert:
+    container_name: pialert
+    # use the below line if you want to test the latest dev image
+    # image: "jokobsk/pi.alert_dev:latest" 
+    image: "jokobsk/pi.alert:latest"      
+    network_mode: "host"        
+    restart: unless-stopped
+    volumes:
+      - local/path/pialert/config:/home/pi/pialert/config
+      - local/path/pialert/db:/home/pi/pialert/db      
+      # (optional) useful for debugging if you have issues setting up the container
+      - local/path/logs:/home/pi/pialert/front/log
+    environment:
+      - TZ=America/Winnipeg     
+      - PORT=20211
