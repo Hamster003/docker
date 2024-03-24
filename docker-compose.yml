@@ -1,23 +1,18 @@
-version: '3.8' 
-
 services:
-  nginx:
-    image: lscr.io/linuxserver/nginx:latest
-    container_name: nginx
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/Winnipeg
-    volumes:
-      - /path/to/nginx/config:/config
-    ports:
-      - 80:80
-      - 443:443
+  app:
+    image: 'jc21/nginx-proxy-manager:latest'
     restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
 
   uptime-kuma:
     image: 'louislam/uptime-kuma:latest'
-    container_name: uptime-kuma
+    container_name: uptime
     restart: unless-stopped
     ports:
       - 3001:3001
@@ -53,19 +48,3 @@ services:
       - 7359:7359/udp #optional
       - 1900:1900/udp #optional
     restart: unless-stopped
-
-  pialert:
-    container_name: pialert
-    # use the below line if you want to test the latest dev image
-    # image: "jokobsk/pi.alert_dev:latest" 
-    image: "jokobsk/pi.alert:latest"      
-    network_mode: "host"        
-    restart: unless-stopped
-    volumes:
-      - local/path/pialert/config:/home/pi/pialert/config
-      - local/path/pialert/db:/home/pi/pialert/db      
-      # (optional) useful for debugging if you have issues setting up the container
-      - local/path/logs:/home/pi/pialert/front/log
-    environment:
-      - TZ=America/Winnipeg     
-      - PORT=20211
