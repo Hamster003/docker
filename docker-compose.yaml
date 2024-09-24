@@ -1,0 +1,168 @@
+services:
+  uptime-kuma:
+    image: 'louislam/uptime-kuma:latest'
+    container_name: uptime
+    restart: unless-stopped
+    ports:
+      - 3001:3001
+
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PUID=1000
+      - PGID=1000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime.rule=Host(`uptime.local.n-jacobson.com`)"
+      - "traefik.http.routers.uptime.entrypoints=https"
+      - "traefik.http.routers.uptime.tls=true"
+      - "traefik.http.services.uptime.loadbalancer.server.port=3001"
+    networks:
+      - proxy
+
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - /path/to/config:/app/config # Make sure your local config directory exists
+      - /var/run/docker.sock:/var/run/docker.sock # (optional) For docker integrations
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homepage.rule=Host(`local.n-jacobson.com`)"
+      - "traefik.http.routers.homepage.entrypoints=https"
+      - "traefik.http.routers.homepage.tls=true"
+      - "traefik.http.services.homepage.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+
+
+  it-tools:
+    image: corentinth/it-tools:latest
+    container_name: it-tools
+    restart: unless-stopped
+    ports:
+      - 9090:80
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.it-tools.rule=Host(`it-tools.local.n-jacobson.com`)"
+      - "traefik.http.routers.it-tools.entrypoints=https"
+      - "traefik.http.routers.it-tools.tls=true"
+      - "traefik.http.services.it-tools.loadbalancer.server.port=80"
+    networks:
+      - proxy
+
+
+  ladder:
+    image: ghcr.io/everywall/ladder:latest
+    container_name: ladder
+    #build: .
+    restart: unless-stopped
+    #command: sh -c ./ladder
+    environment:
+      - PORT=8090
+      - RULESET=/app/ruleset.yaml
+      #- ALLOWED_DOMAINS=example.com,example.org
+      #- ALLOWED_DOMAINS_RULESET=false
+      #- EXPOSE_RULESET=true
+      #- PREFORK=false
+      #- DISABLE_FORM=false
+      #- FORM_PATH=/app/form.html
+      #- X_FORWARDED_FOR=66.249.66.1
+      #- USER_AGENT=Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
+      #- USERPASS=foo:bar
+      #- LOG_URLS=true
+      #- GODEBUG=netdns=go
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./ruleset.yaml:/app/ruleset.yaml
+      - ./handlers/form.html:/app/form.html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ladder.rule=Host(`ladder.local.n-jacobson.com`)"
+      - "traefik.http.routers.ladder.entrypoints=https"
+      - "traefik.http.routers.ladder.tls=true"
+      - "traefik.http.services.ladder.loadbalancer.server.port=8090"
+    networks:
+      - proxy
+
+
+  searxng:
+    image: searxng/searxng
+    container_name: searxng
+    restart: unless-stopped
+    environment:
+          - INSTANCE_NAME=searxng
+          - 'BASE_URL=http://192.168.10.184:9999/'
+    volumes:
+          - './my-instance/searxng:/etc/searxng'
+    ports:
+          - '9999:8080'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.searx.rule=Host(`search.local.n-jacobson.com`)"
+      - "traefik.http.routers.searx.entrypoints=https"
+      - "traefik.http.routers.searx.tls=true"
+      - "traefik.http.services.searx.loadbalancer.server.port=8080"
+    networks:
+      - proxy
+
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./ha/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeassist.rule=Host(`ha.local.n-jacobson.com`)"
+      - "traefik.http.routers.homeassist.entrypoints=https"
+      - "traefik.http.routers.homeassist.tls=true"
+      - "traefik.http.services.homeassist.loadbalancer.server.port=8123"
+    privileged: true
+    network_mode: host
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_CLEANUP: 'true'
+      WATCHTOWER_MONITOR_ONLY: 'false'
+    command: uptime homepage homeassistant searxng ladder it-tools
+
+  navidrome:
+    image: deluan/navidrome:latest
+    user: 1000:1000 # should be owner of volumes
+    ports:
+      - 4533:4533
+    restart: unless-stopped
+    environment:
+      # Optional: put your config options customization here. Examples:
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info
+      ND_SESSIONTIMEOUT: 24h
+      ND_BASEURL: ""
+    volumes:
+      - "/home/debian/navidrome:/data"
+      - "/media/public/'Shared Music':/music:ro"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.music.rule=Host(`music.local.n-jacobson.com`)"
+      - "traefik.http.routers.music.entrypoints=https"
+      - "traefik.http.routers.music.tls=true"
+      - "traefik.http.services.music.loadbalancer.server.port=4533"
+    networks:
+     - proxy
+
+networks:
+  proxy:
+    external: true
